@@ -4,7 +4,7 @@
  * What you see below is very much work-in-progress. The following features are implemented:
  *   - Compiling all classses for the compiler and library ("compile" in the respective subprojects)
  *   - Running JUnit tests ("test") and partest ("test/it:test")
- *   - Creating build/quick with all compiled classes and launcher scripts ("˜")
+ *   - Creating build/quick with all compiled classes and launcher scripts ("dist/mkQuick")
  *   - Creating build/pack with all JARs and launcher scripts ("dist/mkPack")
  *   - Building all scaladoc sets ("doc")
  *   - Publishing ("publishDists" and standard sbt tasks like "publish" and "publishLocal")
@@ -66,6 +66,7 @@ val scalaXmlDep = withoutScalaLang("org.scala-lang.modules" %% "scala-xml" % ver
 val partestDep = withoutScalaLang("org.scala-lang.modules" %% "scala-partest" % versionNumber("partest"))
 val junitDep = "junit" % "junit" % "4.11"
 val junitIntefaceDep = "com.novocode" % "junit-interface" % "0.11" % "test"
+val jolDep = "org.openjdk.jol" % "jol-core" % "0.5"
 val asmDep = "org.scala-lang.modules" % "scala-asm" % versionProps("scala-asm.version")
 val jlineDep = "jline" % "jline" % versionProps("jline.version")
 val antDep = "org.apache.ant" % "ant" % "1.9.4"
@@ -208,7 +209,9 @@ lazy val commonSettings = clearSourceAndResourceDirectories ++ publishSettings +
 
   // Don't log process output (e.g. of forked `compiler/runMain ...Main`), just pass it
   // directly to stdout
-  outputStrategy in run := Some(StdoutOutput)
+  outputStrategy in run := Some(StdoutOutput),
+  Quiet.silenceScalaBinaryVersionWarning,
+  Quiet.silenceIvyUpdateInfoLogging
 )
 
 /** Extra post-processing for the published POM files. These are needed to create POMs that
@@ -494,6 +497,7 @@ lazy val replJlineEmbedded = Project("repl-jline-embedded", file(".") / "target"
       JarJar(inputs, outdir, config)
     }),
     connectInput in run := true
+
   )
   .dependsOn(replJline)
 
@@ -504,7 +508,7 @@ lazy val scaladoc = configureAsSubproject(project)
     name := "scala-compiler-doc",
     description := "Scala Documentation Generator",
     libraryDependencies ++= Seq(scalaXmlDep, scalaParserCombinatorsDep, partestDep),
-    includeFilter in unmanagedResources in Compile := "*.html" | "*.css" | "*.gif" | "*.png" | "*.js" | "*.txt"
+    includeFilter in unmanagedResources in Compile := "*.html" | "*.css" | "*.gif" | "*.png" | "*.js" | "*.txt" | "*.svg" | "*.eot" | "*.woff" | "*.ttf"
   )
   .dependsOn(compiler)
 
@@ -541,7 +545,7 @@ lazy val junit = project.in(file("test") / "junit")
   .settings(disablePublishing: _*)
   .settings(
     fork in Test := true,
-    libraryDependencies ++= Seq(junitDep, junitIntefaceDep),
+    libraryDependencies ++= Seq(junitDep, junitIntefaceDep, jolDep),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-a", "-v"),
     unmanagedSourceDirectories in Test := List(baseDirectory.value)
   )
@@ -686,7 +690,8 @@ lazy val root = (project in file("."))
       genprod.main(Array(dir.getPath))
       GenerateAnyVals.run(dir.getAbsoluteFile)
       state
-    }
+    },
+    Quiet.silenceIvyUpdateInfoLogging
   )
   .aggregate(library, reflect, compiler, interactive, repl, replJline, replJlineEmbedded,
     scaladoc, scalap, partestExtras, junit, libraryAll, scalaDist).settings(
